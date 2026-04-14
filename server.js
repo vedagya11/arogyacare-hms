@@ -10,10 +10,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// =========================
-// API ROUTES
-// =========================
-
+// API Routes
 const authRoutes = require("./src/routes/auth");
 const patientRoutes = require("./src/routes/patients");
 const doctorRoutes = require("./src/routes/doctors");
@@ -34,10 +31,7 @@ app.use("/api", (req, res) => {
     });
 });
 
-// =========================
-// SERVE FRONTEND
-// =========================
-
+// Serve frontend files
 const publicPath = path.join(__dirname, "public");
 app.use(express.static(publicPath));
 
@@ -46,10 +40,7 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(publicPath, "index.html"));
 });
 
-// =========================
-// START SERVER
-// =========================
-
+// Start server
 app.listen(PORT, () => {
     console.log("\n=======================================");
     console.log(`🚀 AarogyaCare Server running on port ${PORT}`);
