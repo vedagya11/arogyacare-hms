@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Appointments - AarogyaCare</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <script src="/js/auth.js"></script>
+    <script src="/js/layout.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.Auth && typeof Auth.protectRoute === "function") {
+                Auth.protectRoute(["admin", "doctor", "receptionist"]);
+            }
+        });
+    </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased relative">
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Book Appointment Modal -->
+    <div id="apptModal"
+        class="fixed inset-0 bg-slate-900/50 hidden z-50 flex items-center justify-center backdrop-blur-sm px-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 relative">
+                <h3 class="text-lg font-bold text-slate-800">Book Appointment</h3>
+                <button type="button" onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <form id="apptForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Select Patient *</label>
+                    <select id="selPatient" required class="premium-input w-full">
+                        <option value="">Loading patients...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Assign Doctor *</label>
+                    <select id="selDoctor" required class="premium-input w-full">
+                        <option value="">Loading doctors...</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Date *</label>
+                        <input type="date" id="apptDate" required class="premium-input w-full" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Time Slot *</label>
+                        <select id="apptTime" required class="premium-input w-full">
+                            <option value="">Select time</option>
+                            <option value="09:00 AM">09:00 AM</option>
+                            <option value="09:30 AM">09:30 AM</option>
+                            <option value="10:00 AM">10:00 AM</option>
+                            <option value="10:30 AM">10:30 AM</option>
+                            <option value="11:00 AM">11:00 AM</option>
+                            <option value="11:30 AM">11:30 AM</option>
+                            <option value="12:00 PM">12:00 PM</option>
+                            <option value="02:00 PM">02:00 PM</option>
+                            <option value="03:00 PM">03:00 PM</option>
+                            <option value="04:00 PM">04:00 PM</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-end gap-3">
+                    <button type="button" onclick="closeModal()"
+                        class="px-4 py-2 border border-slate-300 text-slate-700 rounded shadow-sm hover:bg-slate-50 font-medium">
+                        Cancel
+                    </button>
+                    <button type="submit" id="bookSubmitBtn" class="btn-primary flex justify-center items-center w-32">
+                        <span id="submitText">Confirm Booking</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Status Modal -->
+    <div id="statusModal"
+        class="fixed inset-0 bg-slate-900/50 hidden z-50 flex items-center justify-center backdrop-blur-sm px-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800">Update Status</h3>
+            </div>
+
+            <form id="statusForm" class="p-6">
+                <input type="hidden" id="statusApptId" />
+                <select id="newStatus" class="premium-input w-full mb-6">
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeStatusModal()"
+                        class="px-4 py-2 border border-slate-300 rounded shadow-sm text-sm">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn-primary py-2 px-4 text-sm w-auto">
+                        Update
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="flex h-screen overflow-hidden">
+        <div id="sidebar-container" class="z-20"></div>
+
+        <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden ml-64">
+            <div id="topbar-container" class="sticky top-0 z-10"></div>
+
+            <main class="p-8 pb-20">
+                <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Master Schedule</h2>
+                        <p class="text-slate-500">View and manage appointments queue.</p>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="date" id="filterDate" class="premium-input text-sm py-2" />
+                        <button id="bookBtn" type="button" onclick="openModal()"
+                            class="btn-primary flex items-center px-4 py-2 hidden">
+                            <span class="mr-2 text-lg">+</span> Book Appointment
+                        </button>
+                    </div>
+                </div>
+
+                <div class="premium-card overflow-hidden bg-white">
+                    <div class="overflow-x-auto">
+                        <table class="premium-table w-full relative">
+                            <thead>
+                                <tr>
+                                    <th>Ref ID</th>
+                                    <th>Schedule</th>
+                                    <th>Patient</th>
+                                    <th>Doctor</th>
+                                    <th>Status</th>
+                                    <th id="actionsHeader" class="hidden">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="apptBody">
+                                <tr>
+                                    <td colspan="6" class="text-center py-8 text-slate-500">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        let currentRole = "doctor";
+        let currentUsername = "";
+        let allPatients = [];
+        let allDoctors = [];
+        let allAppointments = [];
+
+        function getRole() {
+            if (window.Auth && typeof Auth.getUserRole === "function") {
+                return Auth.getUserRole() || "doctor";
+            }
+            return localStorage.getItem("hospital_role") || "doctor";
+        }
+
+        function getUsername() {
+            return localStorage.getItem("hospital_username") || "";
+        }
+
+        function canManageAppointments() {
+            return currentRole === "admin" || currentRole === "receptionist";
+        }
+
+        function showToast(message, type = "success") {
+            const container = document.getElementById("toastContainer");
+            const color = type === "success" ? "bg-emerald-500" : "bg-red-500";
+
+            const toast = document.createElement("div");
+            toast.className = `${color} text-white px-4 py-3 rounded shadow-lg transition-all duration-300 opacity-100 translate-y-0 flex items-center text-sm font-medium`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove("opacity-100", "translate-y-0");
+                toast.classList.add("opacity-0", "translate-y-2");
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function openModal() {
+            if (!canManageAppointments()) return;
+
+            document.getElementById("apptForm").reset();
+            document.getElementById("submitText").textContent = "Confirm Booking";
+            const today = new Date().toISOString().split("T")[0];
+            document.getElementById("apptDate").value = today;
+            document.getElementById("apptModal").classList.remove("hidden");
+        }
+
+        function closeModal() {
+            document.getElementById("apptModal").classList.add("hidden");
+        }
+
+        function openStatusModal(id, currentStatus) {
+            if (!canManageAppointments()) return;
+            document.getElementById("statusApptId").value = id;
+            document.getElementById("newStatus").value = currentStatus;
+            document.getElementById("statusModal").classList.remove("hidden");
+        }
+
+        function closeStatusModal() {
+            document.getElementById("statusModal").classList.add("hidden");
+        }
+
+        async function loadDropdowns() {
+            try {
+                const [patientsRes, doctorsRes] = await Promise.all([
+                    fetch("/api/patients"),
+                    fetch("/api/doctors")
+                ]);
+
+                const patientsJson = await patientsRes.json();
+                const doctorsJson = await doctorsRes.json();
+
+                allPatients = Array.isArray(patientsJson.data) ? patientsJson.data : [];
+                allDoctors = Array.isArray(doctorsJson.data) ? doctorsJson.data : [];
+
+                const patientSelect = document.getElementById("selPatient");
+                const doctorSelect = document.getElementById("selDoctor");
+
+                patientSelect.innerHTML =
+                    '<option value="">-- Select Patient --</option>' +
+                    allPatients.map((p) => `<option value="${p.id}">${p.name} (${p.id})</option>`).join("");
+
+                doctorSelect.innerHTML =
+                    '<option value="">-- Select Doctor --</option>' +
+                    allDoctors
+                        .filter((d) => d.available !== false)
+                        .map((d) => `<option value="${d.id}">${d.name} (${d.specialty || d.specialization || "General"})</option>`)
+                        .join("");
+            } catch (error) {
+                showToast("Error loading patients/doctors", "error");
+            }
+        }
+
+        async function saveAppointment(e) {
+            e.preventDefault();
+
+            const patientId = document.getElementById("selPatient").value;
+            const doctorId = document.getElementById("selDoctor").value;
+            const date = document.getElementById("apptDate").value;
+            const time = document.getElementById("apptTime").value;
+
+            if (!patientId || !doctorId || !date || !time) {
+                showToast("Please fill all required fields", "error");
+                return;
+            }
+
+            const payload = { patientId, doctorId, date, time };
+
+            const submitBtn = document.getElementById("bookSubmitBtn");
+            const submitText = document.getElementById("submitText");
+            submitBtn.disabled = true;
+            submitText.textContent = "Booking...";
+
+            try {
+                const res = await fetch("/api/appointments", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    showToast("Booking confirmed!", "success");
+                    closeModal();
+                    await fetchAppointments();
+                } else {
+                    showToast(result.message || "Failed to book appointment", "error");
+                }
+            } catch (error) {
+                showToast("Network error while booking", "error");
+            } finally {
+                submitBtn.disabled = false;
+                submitText.textContent = "Confirm Booking";
+            }
+        }
+
+        async function updateStatus(e) {
+            e.preventDefault();
+
+            const id = document.getElementById("statusApptId").value;
+            const status = document.getElementById("newStatus").value;
+
+            if (!id || !status) {
+                showToast("Invalid status update", "error");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/appointments/${id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status })
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    showToast("Status updated successfully", "success");
+                    closeStatusModal();
+                    await fetchAppointments();
+                } else {
+                    showToast(result.message || "Failed to update status", "error");
+                }
+            } catch (error) {
+                showToast("Network error while updating status", "error");
+            }
+        }
+
+        function getDoctorIdForLoggedInDoctor() {
+            const usernameMap = {
+                doctor: "D001",
+                drananya: "D001",
+                drrahul: "D002",
+                drpriya: "D003",
+                drarjun: "D004",
+                drmeera: "D005"
+            };
+
+            return usernameMap[currentUsername?.toLowerCase()] || "D001";
+        }
+
+        function getStatusBadge(status) {
+            if (status === "Scheduled") return "badge-pending";
+            if (status === "Completed") return "badge-success";
+            if (status === "Cancelled") return "bg-red-100 text-red-600 rounded px-2 py-1 text-xs font-medium";
+            return "bg-slate-100 text-slate-600 rounded px-2 py-1 text-xs font-medium";
+        }
+
+        function renderAppointments(appts) {
+            const tbody = document.getElementById("apptBody");
+            const colspan = canManageAppointments() ? 6 : 5;
+
+            if (!appts || appts.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="${colspan}" class="text-center py-8 text-slate-500">
+                            No appointments scheduled.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            const patientMap = Object.fromEntries(allPatients.map((p) => [p.id, p]));
+            const doctorMap = Object.fromEntries(allDoctors.map((d) => [d.id, d]));
+
+            tbody.innerHTML = appts
+                .map((a) => {
+                    const patient = patientMap[a.patientId] || { name: "Unknown Patient" };
+                    const doctor = doctorMap[a.doctorId] || { name: "Unknown Doctor" };
+                    const badgeClass = getStatusBadge(a.status);
+
+                    const actionCell = canManageAppointments()
+                        ? `
+                            <td>
+                                <button
+                                    type="button"
+                                    onclick="openStatusModal('${a.id}', '${a.status}')"
+                                    class="text-xs font-medium bg-white border border-slate-200 px-3 py-1.5 rounded shadow-sm hover:bg-slate-50 transition-colors"
+                                >
+                                    UPDATE
+                                </button>
+                            </td>
+                        `
+                        : "";
+
+                    return `
+                        <tr>
+                            <td class="font-medium text-slate-500 text-sm">#${a.id || "-"}</td>
+                            <td>
+                                <div class="font-bold text-slate-800">${a.date ? new Date(a.date).toLocaleDateString("en-IN") : "-"}</div>
+                                <div class="text-xs text-blue-600 font-medium">${a.time || "-"}</div>
+                            </td>
+                            <td>
+                                <div class="text-sm font-medium text-slate-800">${patient.name}</div>
+                                <div class="text-xs text-slate-500">${a.patientId || "-"}</div>
+                            </td>
+                            <td>
+                                <div class="text-sm text-slate-700">${doctor.name}</div>
+                            </td>
+                            <td>
+                                <span class="${badgeClass}">${a.status || "Scheduled"}</span>
+                            </td>
+                            ${actionCell}
+                        </tr>
+                    `;
+                })
+                .join("");
+        }
+
+        async function fetchAppointments() {
+            try {
+                const res = await fetch("/api/appointments");
+                const result = await res.json();
+
+                if (!result.success || !Array.isArray(result.data)) {
+                    renderAppointments([]);
+                    return;
+                }
+
+                allAppointments = result.data;
+                let appointments = [...allAppointments];
+
+                if (currentRole === "doctor") {
+                    const doctorId = getDoctorIdForLoggedInDoctor();
+                    appointments = appointments.filter((a) => a.doctorId === doctorId);
+                }
+
+                const filterDate = document.getElementById("filterDate").value;
+                if (filterDate) {
+                    appointments = appointments.filter((a) => a.date === filterDate);
+                }
+
+                renderAppointments(appointments);
+            } catch (error) {
+                document.getElementById("apptBody").innerHTML = `
+                    <tr>
+                        <td colspan="${canManageAppointments() ? 6 : 5}" class="text-center py-8 text-red-500">
+                            Failed to load appointments.
+                        </td>
+                    </tr>
+                `;
+                showToast("Failed to load appointments", "error");
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            currentRole = getRole();
+            currentUsername = getUsername();
+
+            if (canManageAppointments()) {
+                document.getElementById("bookBtn").classList.remove("hidden");
+                document.getElementById("actionsHeader").classList.remove("hidden");
+            }
+
+            document.getElementById("apptForm").addEventListener("submit", saveAppointment);
+            document.getElementById("statusForm").addEventListener("submit", updateStatus);
+            document.getElementById("filterDate").addEventListener("change", fetchAppointments);
+
+            document.getElementById("apptModal").addEventListener("click", (e) => {
+                if (e.target.id === "apptModal") {
+                    closeModal();
+                }
+            });
+
+            document.getElementById("statusModal").addEventListener("click", (e) => {
+                if (e.target.id === "statusModal") {
+                    closeStatusModal();
+                }
+            });
+
+            loadDropdowns();
+            fetchAppointments();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Doctor Dashboard - AarogyaCare</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/layout.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.Auth && typeof Auth.protectRoute === "function") {
+                Auth.protectRoute(["doctor"]);
+            }
+        });
+    </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased relative">
+    <div class="flex h-screen overflow-hidden">
+        <div id="sidebar-container" class="z-20"></div>
+
+        <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden ml-64">
+            <div id="topbar-container" class="sticky top-0 z-10"></div>
+
+            <main class="p-8 pb-20">
+                <div class="mb-8">
+                    <h2 class="text-2xl font-bold text-slate-800">Your Active Clinic Dashboard</h2>
+                    <p class="text-slate-500">Welcome to AarogyaCare. Here is your operational focus for the day.</p>
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="premium-card p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+                        <p class="text-blue-100 mb-1 font-medium">Appointments Today</p>
+                        <h3 class="text-4xl font-bold" id="docKpiToday">0</h3>
+                    </div>
+
+                    <div class="premium-card p-6 bg-white border-l-4 border-emerald-500">
+                        <p class="text-slate-500 mb-1 font-medium">Completed Today</p>
+                        <h3 class="text-3xl font-bold text-slate-800" id="docKpiCompleted">0</h3>
+                    </div>
+
+                    <div class="premium-card p-6 bg-white border-l-4 border-amber-500">
+                        <p class="text-slate-500 mb-1 font-medium">Pending Consultations</p>
+                        <h3 class="text-3xl font-bold text-slate-800" id="docKpiPending">0</h3>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Schedule -->
+                    <div class="lg:col-span-2 premium-card overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-slate-800">Today's Bookings</h3>
+                                <p class="text-xs text-slate-500 mt-1">Includes today’s and nearest upcoming
+                                    consultations.</p>
+                            </div>
+                            <a href="/appointments.html" class="text-blue-600 text-sm font-medium hover:underline">View
+                                Calendar</a>
+                        </div>
+
+                        <div class="p-0">
+                            <div id="todaySchedule" class="divide-y divide-slate-100">
+                                <div class="p-6 text-center text-slate-500">Loading today's schedule...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workload Chart -->
+                    <div class="premium-card p-6">
+                        <h3 class="font-bold text-slate-800 mb-4">Your Week Workload</h3>
+                        <div class="relative h-56 w-full">
+                            <canvas id="docChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        let workloadChartInstance = null;
+
+        function getDoctorIdForLoggedInDoctor() {
+            const username = (localStorage.getItem("hospital_username") || "").toLowerCase();
+
+            const usernameMap = {
+                doctor: "D001",
+                drananya: "D001",
+                drrahul: "D002",
+                drpriya: "D003",
+                drarjun: "D004",
+                drmeera: "D005"
+            };
+
+            return usernameMap[username] || "D001";
+        }
+
+        function normalizeStatus(status) {
+            const s = String(status || "").toLowerCase();
+            if (s === "completed") return "Completed";
+            if (s === "cancelled") return "Cancelled";
+            if (s === "scheduled" || s === "pending" || s === "confirmed") return "Scheduled";
+            return "Scheduled";
+        }
+
+        function getStatusClass(status) {
+            const normalized = normalizeStatus(status);
+            if (normalized === "Completed") return "text-emerald-600";
+            if (normalized === "Cancelled") return "text-red-500";
+            return "text-amber-500";
+        }
+
+        function parseAppointmentDateTime(appt) {
+            const rawDate = appt.date || "";
+            const rawTime = appt.time || "";
+            const parsed = new Date(`${rawDate} ${rawTime}`);
+            if (!isNaN(parsed.getTime())) return parsed;
+            return new Date(rawDate);
+        }
+
+        function formatDisplayTime(timeStr) {
+            return timeStr || "-";
+        }
+
+        function getWeekdayName(dateStr) {
+            const d = new Date(dateStr);
+            return d.toLocaleDateString("en-IN", { weekday: "short" });
+        }
+
+        function buildWeekWorkload(appointments) {
+            const today = new Date();
+            const days = [];
+
+            for (let i = 0; i < 5; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                const iso = d.toISOString().split("T")[0];
+                days.push(iso);
+            }
+
+            const labels = days.map(getWeekdayName);
+            const values = days.map(day => {
+                return appointments.filter(a => a.date === day && normalizeStatus(a.status) !== "Cancelled").length;
+            });
+
+            return { labels, values };
+        }
+
+        function renderSchedule(scheduleItems, patientsMap, sectionTitle = "Today's Bookings") {
+            const scheduleContainer = document.getElementById("todaySchedule");
+            const titleEl = document.querySelector(".premium-card h3");
+
+            if (titleEl) {
+                titleEl.textContent = sectionTitle;
+            }
+
+            if (!scheduleItems.length) {
+                scheduleContainer.innerHTML = `
+                <div class="p-8 text-center text-slate-500">
+                    No appointments available for this doctor.
+                </div>
+            `;
+                return;
+            }
+
+            scheduleContainer.innerHTML = scheduleItems.map(a => {
+                const patient = patientsMap[a.patientId] || { name: "Unknown Patient" };
+                const normalizedStatus = normalizeStatus(a.status);
+
+                return `
+                <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div class="flex items-center min-w-0">
+                        <div class="w-24 text-center border-r border-slate-200 pr-4 mr-4 shrink-0">
+                            <div class="font-bold text-slate-800">${formatDisplayTime(a.time)}</div>
+                            <div class="text-xs text-slate-500">
+                                ${a.date ? new Date(a.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "-"}
+                            </div>
+                        </div>
+
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-slate-800 truncate">${patient.name}</h4>
+                            <p class="text-sm text-slate-500">
+                                Ref: ${a.id} •
+                                <span class="font-medium ${getStatusClass(normalizedStatus)}">${normalizedStatus}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <a href="/medical-records.html" class="btn-primary py-1.5 px-4 text-xs shrink-0">Clinical Entry</a>
+                </div>
+            `;
+            }).join("");
+        }
+
+        function renderChart(labels, values) {
+            const ctx = document.getElementById("docChart");
+
+            if (workloadChartInstance) {
+                workloadChartInstance.destroy();
+            }
+
+            workloadChartInstance = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Appointments",
+                            data: values,
+                            borderColor: "#3b82f6",
+                            borderWidth: 2,
+                            tension: 0.35,
+                            fill: true,
+                            backgroundColor: "rgba(59, 130, 246, 0.12)",
+                            pointBackgroundColor: "#2563eb",
+                            pointBorderWidth: 0,
+                            pointRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function fetchDoctorDashboard() {
+            const todaySchedule = document.getElementById("todaySchedule");
+
+            try {
+                const myDoctorId = getDoctorIdForLoggedInDoctor();
+
+                const [appointmentsRes, patientsRes] = await Promise.all([
+                    fetch("/api/appointments"),
+                    fetch("/api/patients")
+                ]);
+
+                const appointmentsJson = await appointmentsRes.json();
+                const patientsJson = await patientsRes.json();
+
+                const allAppointments = Array.isArray(appointmentsJson.data) ? appointmentsJson.data : [];
+                const allPatients = Array.isArray(patientsJson.data) ? patientsJson.data : [];
+                const patientsMap = Object.fromEntries(allPatients.map(p => [p.id, p]));
+
+                const doctorAppointments = allAppointments
+                    .filter(a => a.doctorId === myDoctorId)
+                    .sort((a, b) => parseAppointmentDateTime(a) - parseAppointmentDateTime(b));
+
+                const today = new Date().toISOString().split("T")[0];
+                const todaysAppointments = doctorAppointments.filter(a => a.date === today);
+
+                document.getElementById("docKpiToday").innerText =
+                    todaysAppointments.filter(a => normalizeStatus(a.status) !== "Cancelled").length;
+
+                document.getElementById("docKpiCompleted").innerText =
+                    todaysAppointments.filter(a => normalizeStatus(a.status) === "Completed").length;
+
+                document.getElementById("docKpiPending").innerText =
+                    doctorAppointments.filter(a => {
+                        const apptDateTime = parseAppointmentDateTime(a);
+                        return normalizeStatus(a.status) === "Scheduled" && apptDateTime >= new Date();
+                    }).length;
+
+                let scheduleItems = [];
+                let sectionTitle = "Today's Bookings";
+
+                if (todaysAppointments.length > 0) {
+                    scheduleItems = todaysAppointments;
+                    sectionTitle = "Today's Bookings";
+                } else {
+                    scheduleItems = doctorAppointments
+                        .filter(a => parseAppointmentDateTime(a) >= new Date())
+                        .slice(0, 8);
+                    sectionTitle = "Upcoming Appointments";
+                }
+
+                renderSchedule(scheduleItems, patientsMap, sectionTitle);
+
+                const workload = buildWeekWorkload(doctorAppointments);
+                renderChart(workload.labels, workload.values);
+
+            } catch (error) {
+                console.error("Doctor dashboard error:", error);
+                todaySchedule.innerHTML = `
+                <div class="p-8 text-center text-red-500">
+                    Failed to load doctor dashboard.
+                </div>
+            `;
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", fetchDoctorDashboard);
+    </script>
+</body>
+
+</html>

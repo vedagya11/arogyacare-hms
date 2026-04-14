@@ -1,0 +1,25 @@
+{
+  "name": "arogyacare",
+  "version": "1.0.0",
+  "description": "AarogyaCare Hospital Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "hospital",
+    "node",
+    "express"
+  ],
+  "author": "Vedagya Sharma",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}

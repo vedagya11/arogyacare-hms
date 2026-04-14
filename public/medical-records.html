@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Medical Records - AarogyaCare</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <script src="/js/auth.js"></script>
+    <script src="/js/layout.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.Auth && typeof Auth.protectRoute === "function") {
+                Auth.protectRoute(["admin", "doctor"]);
+            }
+        });
+    </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased relative">
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Record Modal -->
+    <div id="recordModal"
+        class="fixed inset-0 bg-slate-900/50 hidden z-50 flex items-center justify-center backdrop-blur-sm px-4">
+        <div
+            class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-blue-50">
+                <h3 class="text-lg font-bold text-blue-900">Add Clinical Entry</h3>
+                <button type="button" onclick="closeModal()" class="text-blue-400 hover:text-blue-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <form id="recordForm" class="p-6 overflow-y-auto space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Target Patient *</label>
+                    <select id="recPatient" required class="premium-input w-full">
+                        <option value="">Loading patients...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Primary Diagnosis *</label>
+                    <input type="text" id="recDiag" required class="premium-input w-full"
+                        placeholder="e.g. Type 2 Diabetes Mellitus" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Prescription</label>
+                    <textarea id="recRx" rows="3" class="premium-input w-full" placeholder="Rx Note..."></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Clinical Notes</label>
+                    <textarea id="recNotes" rows="4" class="premium-input w-full"
+                        placeholder="Patient reported..."></textarea>
+                </div>
+
+                <div class="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-4">
+                    <button type="button" onclick="closeModal()"
+                        class="px-4 py-2 border border-slate-300 text-slate-700 rounded shadow-sm hover:bg-slate-50 font-medium">
+                        Cancel
+                    </button>
+                    <button type="submit" id="submitBtn" class="btn-primary w-32 flex justify-center items-center">
+                        <span id="submitText">Submit Entry</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="flex h-screen overflow-hidden">
+        <div id="sidebar-container" class="z-20"></div>
+
+        <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden ml-64">
+            <div id="topbar-container" class="sticky top-0 z-10"></div>
+
+            <main class="p-8 pb-20">
+                <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Medical Records</h2>
+                        <p class="text-slate-500">Secure access to clinical histories and prescriptions.</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 rounded-xl p-8 mb-8 text-white shadow-lg overflow-hidden relative">
+                    <div class="absolute right-0 top-0 opacity-10 transform scale-150 translate-x-10 -translate-y-10">
+                        <svg class="w-64 h-64" fill="currentColor" viewBox="0 0 24 24">
+                            <path
+                                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM11 19.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                        </svg>
+                    </div>
+
+                    <h3 class="text-xl font-bold mb-4 relative z-10">Search Patient Database</h3>
+
+                    <div class="flex max-w-2xl relative z-10">
+                        <select id="searchPatient"
+                            class="flex-1 bg-white/10 border border-white/20 text-white rounded-l-lg px-4 py-3 outline-none focus:bg-white/20 transition-colors">
+                            <option value="" class="text-slate-800">Select Patient...</option>
+                        </select>
+                        <button type="button" onclick="searchRecords()"
+                            class="bg-blue-500 hover:bg-blue-600 font-bold px-8 rounded-r-lg transition-colors">
+                            Retrieve
+                        </button>
+                    </div>
+
+                    <div class="mt-6 flex gap-4 relative z-10" id="doctorActions">
+                        <button type="button" onclick="openModal()"
+                            class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded text-sm font-medium backdrop-blur-sm transition-colors border border-white/10 hidden"
+                            id="addEntryBtn">
+                            + Add New Clinical Entry
+                        </button>
+                    </div>
+                </div>
+
+                <div id="resultsContainer" class="hidden">
+                    <h3 class="font-bold text-lg text-slate-700 mb-4 border-b border-slate-200 pb-2">Clinical History
+                        Archive</h3>
+                    <div class="space-y-4" id="recordsList"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        let currentRole = "doctor";
+        let allPatients = [];
+
+        function getRole() {
+            if (window.Auth && typeof Auth.getUserRole === "function") {
+                return Auth.getUserRole() || "doctor";
+            }
+            return localStorage.getItem("role") || "doctor";
+        }
+
+        function showToast(message, type = "success") {
+            const container = document.getElementById("toastContainer");
+            const color = type === "success" ? "bg-emerald-500" : "bg-red-500";
+
+            const toast = document.createElement("div");
+            toast.className = `${color} text-white px-4 py-3 rounded shadow-lg transition-all duration-300 opacity-100 translate-y-0 flex items-center text-sm font-medium`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove("opacity-100", "translate-y-0");
+                toast.classList.add("opacity-0", "translate-y-2");
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        async function loadPatients() {
+            try {
+                const res = await fetch("/api/patients");
+                const result = await res.json();
+
+                const searchPatient = document.getElementById("searchPatient");
+                const recPatient = document.getElementById("recPatient");
+
+                if (!result.success || !Array.isArray(result.data)) {
+                    searchPatient.innerHTML = '<option value="" class="text-slate-800">No patients available</option>';
+                    recPatient.innerHTML = '<option value="">No patients available</option>';
+                    return;
+                }
+
+                allPatients = result.data;
+
+                const baseSearch = '<option value="" class="text-slate-800">Select Patient...</option>';
+                const baseModal = '<option value="">Select Patient...</option>';
+
+                const patientOptions = result.data.map((p) => {
+                    return `<option value="${p.id}" class="text-slate-800">${p.name} (${p.id})</option>`;
+                }).join("");
+
+                searchPatient.innerHTML = baseSearch + patientOptions;
+                recPatient.innerHTML = baseModal + patientOptions;
+            } catch (error) {
+                showToast("Failed to load patients", "error");
+                document.getElementById("searchPatient").innerHTML = '<option value="" class="text-slate-800">Failed to load</option>';
+                document.getElementById("recPatient").innerHTML = '<option value="">Failed to load</option>';
+            }
+        }
+
+        function openModal() {
+            if (currentRole !== "doctor") return;
+            document.getElementById("recordForm").reset();
+            document.getElementById("submitText").textContent = "Submit Entry";
+            document.getElementById("recordModal").classList.remove("hidden");
+        }
+
+        function closeModal() {
+            document.getElementById("recordModal").classList.add("hidden");
+        }
+
+        async function saveRecord(e) {
+            e.preventDefault();
+
+            const patientId = document.getElementById("recPatient").value;
+            const diagnosis = document.getElementById("recDiag").value.trim();
+            const prescription = document.getElementById("recRx").value.trim();
+            const notes = document.getElementById("recNotes").value.trim();
+
+            if (!patientId || !diagnosis) {
+                showToast("Please fill required fields", "error");
+                return;
+            }
+
+            const payload = {
+                patientId,
+                diagnosis,
+                prescription,
+                notes
+            };
+
+            const submitBtn = document.getElementById("submitBtn");
+            const submitText = document.getElementById("submitText");
+
+            submitBtn.disabled = true;
+            submitText.textContent = "Saving...";
+
+            try {
+                const res = await fetch("/api/medical-records", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    showToast("Clinical entry saved successfully", "success");
+                    closeModal();
+
+                    if (document.getElementById("searchPatient").value === patientId) {
+                        await searchRecords();
+                    }
+                } else {
+                    showToast(result.message || "Failed to save record", "error");
+                }
+            } catch (error) {
+                showToast("Network error while saving record", "error");
+            } finally {
+                submitBtn.disabled = false;
+                submitText.textContent = "Submit Entry";
+            }
+        }
+
+        async function searchRecords() {
+            const patientId = document.getElementById("searchPatient").value;
+
+            if (!patientId) {
+                showToast("Please select a patient first", "error");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/medical-records?patientId=${encodeURIComponent(patientId)}`);
+                const result = await res.json();
+
+                const resultsContainer = document.getElementById("resultsContainer");
+                const recordsList = document.getElementById("recordsList");
+
+                resultsContainer.classList.remove("hidden");
+
+                if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+                    recordsList.innerHTML = `
+                        <div class="premium-card p-8 text-center text-slate-500 bg-white">
+                            No prior clinical history found for ${patientId}.
+                        </div>
+                    `;
+                    return;
+                }
+
+                const sortedRecords = [...result.data].sort((a, b) => {
+                    const aId = String(a.id || "");
+                    const bId = String(b.id || "");
+                    return bId.localeCompare(aId);
+                });
+
+                recordsList.innerHTML = sortedRecords.map((r) => `
+                    <div class="premium-card bg-white p-0 overflow-hidden border-l-4 border-blue-500">
+                        <div class="bg-slate-50 px-6 py-4 flex justify-between items-center border-b border-slate-100">
+                            <div>
+                                <span class="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded truncate leading-none uppercase tracking-wide mr-2">
+                                    Ref: ${r.id || "-"}
+                                </span>
+                                <span class="font-semibold text-slate-800">${r.date || "Unknown date"}</span>
+                            </div>
+                            <div class="text-sm text-slate-500 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                                By ${r.doctorId || "Doctor"}
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <h4 class="font-bold text-lg text-slate-800 mb-2">${r.diagnosis || "No diagnosis provided"}</h4>
+
+                            ${r.prescription ? `
+                                <div class="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-4">
+                                    <span class="font-bold text-emerald-800 text-sm block mb-1">Rx Prescription</span>
+                                    <p class="text-emerald-900 text-sm whitespace-pre-wrap">${r.prescription}</p>
+                                </div>
+                            ` : ""}
+
+                            ${r.notes ? `
+                                <div class="mt-4 text-slate-600 text-sm">
+                                    <strong>Clinical Notes:</strong><br />
+                                    <p class="whitespace-pre-wrap">${r.notes}</p>
+                                </div>
+                            ` : ""}
+                        </div>
+                    </div>
+                `).join("");
+            } catch (error) {
+                showToast("Failed to retrieve medical records", "error");
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            currentRole = getRole();
+
+            if (currentRole === "doctor") {
+                document.getElementById("addEntryBtn").classList.remove("hidden");
+            }
+
+            document.getElementById("recordForm").addEventListener("submit", saveRecord);
+
+            document.getElementById("recordModal").addEventListener("click", (e) => {
+                if (e.target.id === "recordModal") {
+                    closeModal();
+                }
+            });
+
+            loadPatients();
+        });
+    </script>
+</body>
+
+</html>

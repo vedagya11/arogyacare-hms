@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Receptionist Dashboard - AarogyaCare</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <script src="/js/auth.js"></script>
+    <script src="/js/layout.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (window.Auth && typeof Auth.protectRoute === "function") {
+                Auth.protectRoute(["receptionist"]);
+            }
+        });
+    </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased relative">
+    <div class="flex h-screen overflow-hidden">
+        <div id="sidebar-container" class="z-20"></div>
+
+        <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden ml-64">
+            <div id="topbar-container" class="sticky top-0 z-10"></div>
+
+            <main class="p-8 pb-20">
+                <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Front Desk Hub</h2>
+                        <p class="text-slate-500">Live overview of incoming flow and bookings.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <a href="/patients.html"
+                        class="premium-card p-6 border-l-4 border-blue-500 hover:bg-blue-50 cursor-pointer transition-colors block">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-blue-600 mb-2 uppercase tracking-wide">Action</span>
+                            <span class="text-lg font-bold text-slate-800">Register Patient &rarr;</span>
+                        </div>
+                    </a>
+
+                    <a href="/appointments.html"
+                        class="premium-card p-6 border-l-4 border-indigo-500 hover:bg-indigo-50 cursor-pointer transition-colors block">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-indigo-600 mb-2 uppercase tracking-wide">Action</span>
+                            <span class="text-lg font-bold text-slate-800">Book Appointment &rarr;</span>
+                        </div>
+                    </a>
+
+                    <div class="premium-card p-6 bg-emerald-500 text-white shadow-lg">
+                        <p class="text-emerald-100 font-medium mb-1">Total Patients DB</p>
+                        <h3 class="text-3xl font-bold" id="recPatients">0</h3>
+                    </div>
+
+                    <div class="premium-card p-6 bg-slate-800 text-white shadow-lg">
+                        <p class="text-slate-300 font-medium mb-1">Queue Today</p>
+                        <h3 class="text-3xl font-bold" id="recQueue">0</h3>
+                    </div>
+                </div>
+
+                <div class="premium-card overflow-hidden">
+                    <div class="px-6 py-5 border-b border-slate-100 flex justify-between bg-slate-50 items-center">
+                        <div>
+                            <h3 class="font-bold text-slate-800">Active Queue (Today)</h3>
+                            <p class="text-xs text-slate-500 mt-1">If no appointments exist today, nearest upcoming
+                                appointments are shown.</p>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="premium-table w-full">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Patient</th>
+                                    <th>Doctor</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recApptBody">
+                                <tr>
+                                    <td colspan="4" class="text-center py-6 text-slate-500">Loading queue...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        function normalizeStatus(status) {
+            const s = String(status || "").toLowerCase();
+            if (s === "completed") return "Completed";
+            if (s === "cancelled") return "Cancelled";
+            if (s === "scheduled" || s === "pending" || s === "confirmed") return "Scheduled";
+            return "Scheduled";
+        }
+
+        function getStatusBadge(status) {
+            const normalized = normalizeStatus(status);
+
+            if (normalized === "Completed") {
+                return "badge-success";
+            }
+
+            if (normalized === "Cancelled") {
+                return "bg-red-100 text-red-600 rounded px-3 py-1 text-xs font-medium inline-block";
+            }
+
+            return "badge-pending";
+        }
+
+        function parseAppointmentDateTime(appt) {
+            const rawDate = appt.date || "";
+            const rawTime = appt.time || "";
+            const parsed = new Date(`${rawDate} ${rawTime}`);
+
+            if (!isNaN(parsed.getTime())) {
+                return parsed;
+            }
+
+            return new Date(rawDate);
+        }
+
+        function renderQueue(appointments, patientMap, doctorMap) {
+            const tbody = document.getElementById("recApptBody");
+
+            if (!appointments.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-6 text-slate-500">
+                            No appointments available in the queue.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = appointments.map((a) => {
+                const patient = patientMap[a.patientId] || { name: "Unknown Patient" };
+                const doctor = doctorMap[a.doctorId] || { name: "Unknown Doctor" };
+                const normalizedStatus = normalizeStatus(a.status);
+
+                return `
+                    <tr>
+                        <td class="font-bold text-slate-700">${a.time || "-"}</td>
+                        <td class="font-medium text-slate-800">${patient.name}</td>
+                        <td>${doctor.name}</td>
+                        <td><span class="${getStatusBadge(normalizedStatus)}">${normalizedStatus}</span></td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        async function fetchReceptionDashboard() {
+            const tbody = document.getElementById("recApptBody");
+
+            try {
+                const [patientsRes, appointmentsRes, doctorsRes] = await Promise.all([
+                    fetch("/api/patients"),
+                    fetch("/api/appointments"),
+                    fetch("/api/doctors")
+                ]);
+
+                const patientsJson = await patientsRes.json();
+                const appointmentsJson = await appointmentsRes.json();
+                const doctorsJson = await doctorsRes.json();
+
+                const patients = Array.isArray(patientsJson.data) ? patientsJson.data : [];
+                const allAppointments = Array.isArray(appointmentsJson.data) ? appointmentsJson.data : [];
+                const doctors = Array.isArray(doctorsJson.data) ? doctorsJson.data : [];
+
+                const patientMap = Object.fromEntries(patients.map((p) => [p.id, p]));
+                const doctorMap = Object.fromEntries(doctors.map((d) => [d.id, d]));
+
+                document.getElementById("recPatients").innerText = patients.length;
+
+                const today = new Date().toISOString().split("T")[0];
+                let todaysAppointments = allAppointments
+                    .filter((a) => a.date === today)
+                    .sort((a, b) => parseAppointmentDateTime(a) - parseAppointmentDateTime(b));
+
+                if (!todaysAppointments.length) {
+                    todaysAppointments = [...allAppointments]
+                        .filter((a) => parseAppointmentDateTime(a) >= new Date())
+                        .sort((a, b) => parseAppointmentDateTime(a) - parseAppointmentDateTime(b))
+                        .slice(0, 6);
+                }
+
+                const activeQueueCount = todaysAppointments.filter(
+                    (a) => normalizeStatus(a.status) !== "Cancelled"
+                ).length;
+
+                document.getElementById("recQueue").innerText = activeQueueCount;
+
+                renderQueue(todaysAppointments, patientMap, doctorMap);
+
+            } catch (error) {
+                console.error("Reception dashboard error:", error);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-center py-6 text-red-500">
+                            Failed to load front desk queue.
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", fetchReceptionDashboard);
+    </script>
+</body>
+
+</html>
