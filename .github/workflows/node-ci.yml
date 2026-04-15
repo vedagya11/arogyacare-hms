@@ -1,0 +1,39 @@
+name: AarogyaCare CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Start server and run smoke test
+        run: |
+          echo "Starting Express server..."
+          npm start > server.log 2>&1 &
+          
+          echo "Waiting for server to initialize..."
+          sleep 5
+          
+          echo "Checking homepage..."
+          curl -f http://localhost:3000/
+          
+          echo "Checking API..."
+          curl -f http://localhost:3000/api/patients
+          
+          echo "Server is running correctly."
