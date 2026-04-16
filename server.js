@@ -16,12 +16,14 @@ const patientRoutes = require("./src/routes/patients");
 const doctorRoutes = require("./src/routes/doctors");
 const appointmentRoutes = require("./src/routes/appointments");
 const medicalRecordRoutes = require("./src/routes/medical-records");
+const publicRoutes = require("./src/routes/public");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/doctors", doctorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/medical-records", medicalRecordRoutes);
+app.use("/api/public", publicRoutes);
 
 // API fallback
 app.use("/api", (req, res) => {
